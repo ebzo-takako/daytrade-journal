@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>デイトレ日誌</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f4f0; color: #1a1a18;
+    font-size: 14px; line-height: 1.6;
+    min-height: 100vh; padding: 2rem 1rem;
+  }
+  .container { max-width: 680px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: #888780; margin-bottom: 1.5rem; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
+  input[type=date], input[type=time] {
+    font-size: 14px; padding: 6px 10px;
+    border: 0.5px solid #b4b2a9; border-radius: 8px;
+    background: #fff; color: #1a1a18;
+  }
+  .section { background: #fff; border: 0.5px solid #d3d1c7; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .section-title { font-size: 12px; font-weight: 500; color: #888780; margin-bottom: 12px; }
+  label { font-size: 13px; color: #5f5e5a; display: block; margin-bottom: 4px; }
+  input[type=text], input[type=number], input[type=time], select, textarea {
+    width: 100%; font-size: 14px; padding: 7px 10px;
+    border: 0.5px solid #b4b2a9; border-radius: 8px;
+    background: #fff; color: #1a1a18;
+    margin-bottom: 12px; font-family: inherit; resize: vertical;
+  }
+  textarea { min-height: 64px; }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: #534AB7;
+    box-shadow: 0 0 0 2px rgba(83,74,183,0.12);
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+  .held-badge {
+    display: inline-block; background: #EEEDFE; color: #3C3489;
+    border-radius: 8px; padding: 6px 14px; font-size: 13px; font-weight: 500; margin-bottom: 12px;
+  }
+  .mood { display: flex; gap: 8px; margin-bottom: 12px; }
+  .mood-btn {
+    flex: 1; padding: 8px 4px; border: 0.5px solid #b4b2a9; border-radius: 8px;
+    background: #f5f4f0; cursor: pointer; font-size: 13px; color: #5f5e5a; text-align: center; transition: all 0.15s;
+  }
+  .mood-btn:hover { background: #EEEDFE; border-color: #534AB7; }
+  .mood-btn.active { border-color: #534AB7; background: #EEEDFE; color: #3C3489; font-weight: 500; }
+  .rule-check { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; cursor: pointer; }
+  .rule-check input { width: 16px; height: 16px; margin: 0; accent-color: #534AB7; cursor: pointer; }
+  .summary-card {
+    background: #f5f4f0; border-radius: 8px; padding: 12px 16px;
+    display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;
+  }
+  .save-btn {
+    width: 100%; padding: 11px; margin-top: 1rem;
+    font-size: 14px; font-weight: 500; border: none; border-radius: 8px;
+    background: #534AB7; color: #fff; cursor: pointer; transition: background 0.15s;
+  }
+  .save-btn:hover { background: #3C3489; }
+  .toast {
+    background: #EAF3DE; color: #27500A; border-radius: 8px;
+    padding: 8px 14px; font-size: 13px; margin-top: 8px; display: none; text-align: center;
+  }
+  .result-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 20px;
+    font-size: 11px; font-weight: 500; margin-left: 6px;
+  }
+  .win { background: #EAF3DE; color: #27500A; }
+  .loss { background: #FCEBEB; color: #791F1F; }
+  .even { background: #F1EFE8; color: #444441; }
+  .monthly-bar { background: #fff; border: 0.5px solid #d3d1c7; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .progress-track { height: 8px; background: #f1efe8; border-radius: 4px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #534AB7; border-radius: 4px; transition: width 0.4s; }
+  .tab-row { display: flex; gap: 4px; margin-bottom: 1rem; }
+  .tab-btn {
+    padding: 6px 14px; border: 0.5px solid #b4b2a9; border-radius: 20px;
+    background: #f5f4f0; color: #5f5e5a; font-size: 13px; cursor: pointer; transition: all 0.15s;
+  }
+  .tab-btn.active { background: #534AB7; color: #fff; border-color: #534AB7; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat-card { background: #f5f4f0; border-radius: 8px; padding: 10px 12px; }
+  .stat-lbl { font-size: 11px; color: #888780; margin-bottom: 4px; }
+  .stat-val { font-size: 18px; font-weight: 500; }
+  .chart-title { font-size: 12px; font-weight: 500; color: #5f5e5a; margin-bottom: 10px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+  .bar-label { width: 64px; color: #888780; text-align: right; flex-shrink: 0; font-size: 11px; }
+  .bar-track { flex: 1; height: 20px; background: #f1efe8; border-radius: 4px; overflow: hidden; position: relative; }
+  .bar-fill-win { height: 100%; background: #97C459; border-radius: 4px; transition: width 0.5s; display: flex; align-items: center; padding-left: 6px; }
+  .bar-count { width: 40px; color: #5f5e5a; flex-shrink: 0; font-size: 11px; }
+  .bar-pnl { width: 76px; font-size: 12px; text-align: right; flex-shrink: 0; }
+  .no-data { font-size: 13px; color: #b4b2a9; text-align: center; padding: 1.5rem 0; }
+  .entry-item { border: 0.5px solid #d3d1c7; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; background: #fff; }
+  .entry-row { display: flex; justify-content: space-between; align-items: center; }
+  .entry-del { background: none; border: none; color: #b4b2a9; cursor: pointer; font-size: 18px; padding: 0 4px; line-height: 1; }
+  .entry-del:hover { color: #E24B4A; }
+  .entries-title { font-size: 13px; font-weight: 500; color: #888780; margin-bottom: 8px; }
+  @media (max-width: 480px) {
+    .row2, .row4 { grid-template-columns: 1fr 1fr; }
+    .header { flex-direction: column; gap: 12px; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <h1>デイトレ日誌</h1>
+      <div class="subtitle">無理せず毎日少しずつ</div>
+    </div>
+    <input type="date" id="trade-date">
+  </div>
+
+  <div class="monthly-bar">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="font-size:12px;color:#888780;">今月の累計損益</div>
+      <div style="font-size:20px;font-weight:500;" id="monthly-total">0円</div>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#888780;margin-top:4px;"><span>0円</span><span>目標: 500,000円</span></div>
+  </div>
+
+  <div class="tab-row">
+    <button class="tab-btn active" onclick="switchTab('record')">記録する</button>
+    <button class="tab-btn" onclick="switchTab('stats')">統計・分析</button>
+    <button class="tab-btn" onclick="switchTab('history')">履歴</button>
+  </div>
+
+  <!-- 記録タブ -->
+  <div class="tab-content active" id="tab-record">
+    <div class="section">
+      <div class="section-title">トレード記録</div>
+      <div class="row2">
+        <div><label>銘柄コード</label><input type="text" id="ticker" placeholder="例：7203"></div>
+        <div><label>結果</label>
+          <select id="result">
+            <option value="">選択</option>
+            <option value="win">勝ち</option>
+            <option value="loss">負け</option>
+            <option value="even">引き分け</option>
+          </select>
+        </div>
+      </div>
+      <div class="row4">
+        <div><label>エントリー時刻</label><input type="time" id="entry-time"></div>
+        <div><label>アウト時刻</label><input type="time" id="exit-time"></div>
+        <div><label>エントリー価格</label><input type="number" id="entry-price" placeholder="円"></div>
+        <div><label>決済価格</label><input type="number" id="exit-price" placeholder="円"></div>
+      </div>
+      <div id="held-display"></div>
+      <div class="row2">
+        <div><label>損益（円）</label><input type="number" id="pnl" placeholder="±円"></div>
+      </div>
+      <label>エントリー理由</label>
+      <textarea id="entry-reason" placeholder="なぜこの銘柄を選んだか、どのシグナルでエントリーしたか"></textarea>
+      <label>決済理由</label>
+      <textarea id="exit-reason" placeholder="なぜここで決済したか（利確・損切り・ルールに従って など）"></textarea>
+      <div id="summary-area"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">ルール確認</div>
+      <label class="rule-check"><input type="checkbox" id="r1"> 前場のみ（9:00〜11:30）で取引した</label>
+      <label class="rule-check"><input type="checkbox" id="r2"> 寄り付きは見送った</label>
+      <label class="rule-check"><input type="checkbox" id="r3"> 損失上限を超えなかった</label>
+      <label class="rule-check"><input type="checkbox" id="r4"> 感情的な売買をしなかった</label>
+      <label class="rule-check"><input type="checkbox" id="r5"> 取引前に深呼吸をした</label>
+    </div>
+
+    <div class="section">
+      <div class="section-title">メンタル・感情メモ</div>
+      <label>今日のメンタル状態</label>
+      <div class="mood">
+        <div class="mood-btn" onclick="setMood(this,'最高')">最高</div>
+        <div class="mood-btn" onclick="setMood(this,'良い')">良い</div>
+        <div class="mood-btn" onclick="setMood(this,'普通')">普通</div>
+        <div class="mood-btn" onclick="setMood(this,'悪い')">悪い</div>
+      </div>
+      <label>感情メモ（取引中に感じたこと）</label>
+      <textarea id="emotion-note" placeholder="焦り、迷い、自信、冷静さ… 正直に書く"></textarea>
+      <label>明日への改善点</label>
+      <textarea id="improvement" placeholder="次のトレードで意識したいこと"></textarea>
+    </div>
+
+    <div class="section">
+      <div class="section-title">学習メモ（今日の30分）</div>
+      <textarea id="learning" placeholder="今日学んだこと、気づき、次に試したいこと"></textarea>
+    </div>
+
+    <button class="save-btn" onclick="saveEntry()">この日の記録を保存する</button>
+    <div class="toast" id="toast">保存しました！</div>
+  </div>
+
+  <!-- 統計タブ -->
+  <div class="tab-content" id="tab-stats">
+    <div class="section">
+      <div class="section-title">保有時間と損益の関係</div>
+      <div id="stats-content"><div class="no-data">記録が増えると分析が表示されます</div></div>
+    </div>
+  </div>
+
+  <!-- 履歴タブ -->
+  <div class="tab-content" id="tab-history">
+    <div id="entries-list"></div>
+  </div>
+</div>
+
+<script>
+let mood = '';
+let entries = JSON.parse(localStorage.getItem('daytrade-journal-v1') || '[]');
+
+(function init() {
+  const d = new Date();
+  document.getElementById('trade-date').value =
+    d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  renderEntries();
+  updateMonthly();
+})();
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('onclick').includes("'" + name + "'"));
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'stats') renderStats();
+  if (name === 'history') renderEntries();
+}
+
+function setMood(el, val) {
+  mood = val;
+  document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function calcHeld(entry, exit) {
+  if (!entry || !exit) return null;
+  const [eh, em] = entry.split(':').map(Number);
+  const [xh, xm] = exit.split(':').map(Number);
+  const mins = (xh * 60 + xm) - (eh * 60 + em);
+  return mins > 0 ? mins : null;
+}
+
+function updateHeldDisplay() {
+  const et = document.getElementById('entry-time').value;
+  const xt = document.getElementById('exit-time').value;
+  const mins = calcHeld(et, xt);
+  document.getElementById('held-display').innerHTML = mins !== null
+    ? '<div class="held-badge">保有時間：' + mins + '分</div>' : '';
+}
+
+document.getElementById('entry-time').addEventListener('input', updateHeldDisplay);
+document.getElementById('exit-time').addEventListener('input', updateHeldDisplay);
+
+document.getElementById('pnl').addEventListener('input', function() {
+  const pnl = parseFloat(this.value) || 0;
+  const area = document.getElementById('summary-area');
+  if (!pnl) { area.innerHTML = ''; return; }
+  const color = pnl > 0 ? '#27500A' : '#791F1F';
+  area.innerHTML = '<div class="summary-card"><div><div style="font-size:12px;color:#888780;">今日の損益</div><div style="font-size:22px;font-weight:500;color:' + color + '">' + (pnl>=0?'+':'') + pnl.toLocaleString() + '円</div></div><div style="font-size:12px;color:#888780;">月間目標：500,000円</div></div>';
+});
+
+function saveEntry() {
+  const et = document.getElementById('entry-time').value;
+  const xt = document.getElementById('exit-time').value;
+  entries.unshift({
+    date: document.getElementById('trade-date').value,
+    ticker: document.getElementById('ticker').value,
+    result: document.getElementById('result').value,
+    entryTime: et, exitTime: xt,
+    heldMins: calcHeld(et, xt),
+    entryPrice: document.getElementById('entry-price').value,
+    exitPrice: document.getElementById('exit-price').value,
+    pnl: document.getElementById('pnl').value,
+    entryReason: document.getElementById('entry-reason').value,
+    exitReason: document.getElementById('exit-reason').value,
+    rules: ['r1','r2','r3','r4','r5'].map(id => document.getElementById(id).checked),
+    mood, emotionNote: document.getElementById('emotion-note').value,
+    improvement: document.getElementById('improvement').value,
+    learning: document.getElementById('learning').value,
+  });
+  localStorage.setItem('daytrade-journal-v1', JSON.stringify(entries));
+  renderEntries(); updateMonthly();
+  const t = document.getElementById('toast');
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2000);
+}
+
+function deleteEntry(i) {
+  if (!confirm('この記録を削除しますか？')) return;
+  entries.splice(i, 1);
+  localStorage.setItem('daytrade-journal-v1', JSON.stringify(entries));
+  renderEntries(); updateMonthly();
+  if (document.getElementById('tab-stats').classList.contains('active')) renderStats();
+}
+
+function updateMonthly() {
+  const now = new Date();
+  const ym = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const total = entries.filter(e => e.date && e.date.startsWith(ym))
+    .reduce((s, e) => s + (parseFloat(e.pnl) || 0), 0);
+  const pct = Math.min(100, Math.max(0, (total / 500000) * 100));
+  const el = document.getElementById('monthly-total');
+  el.textContent = (total >= 0 ? '+' : '') + total.toLocaleString() + '円';
+  el.style.color = total > 0 ? '#27500A' : total < 0 ? '#791F1F' : '#1a1a18';
+  document.getElementById('progress-fill').style.width = pct.toFixed(1) + '%';
+}
+
+function renderStats() {
+  const el = document.getElementById('stats-content');
+  const valid = entries.filter(e => e.heldMins != null && e.pnl !== '');
+  if (valid.length < 2) {
+    el.innerHTML = '<div class="no-data">記録が2件以上になると分析が表示されます</div>'; return;
+  }
+  const wins = valid.filter(e => (parseFloat(e.pnl)||0) > 0);
+  const losses = valid.filter(e => (parseFloat(e.pnl)||0) < 0);
+  const avg = arr => arr.length ? Math.round(arr.reduce((s,e)=>s+e.heldMins,0)/arr.length) : null;
+  const avgAll = avg(valid), avgWin = avg(wins), avgLoss = avg(losses);
+
+  const buckets = [
+    { label: '〜5分',   min: 0,  max: 5   },
+    { label: '5〜15分', min: 5,  max: 15  },
+    { label: '15〜30分',min: 15, max: 30  },
+    { label: '30〜60分',min: 30, max: 60  },
+    { label: '60分〜',  min: 60, max: 9999},
+  ];
+  const bdata = buckets.map(b => {
+    const items = valid.filter(e => e.heldMins >= b.min && e.heldMins < b.max);
+    if (!items.length) return null;
+    const w = items.filter(e => (parseFloat(e.pnl)||0) > 0).length;
+    const l = items.filter(e => (parseFloat(e.pnl)||0) < 0).length;
+    const avgPnl = Math.round(items.reduce((s,e)=>s+(parseFloat(e.pnl)||0),0)/items.length);
+    return { label: b.label, total: items.length, win: w, loss: l, avgPnl };
+  }).filter(Boolean);
+
+  const maxTotal = Math.max(...bdata.map(b=>b.total), 1);
+  const barsHtml = bdata.map(b => {
+    const color = b.avgPnl > 0 ? '#27500A' : b.avgPnl < 0 ? '#791F1F' : '#888780';
+    const pct = Math.round((b.win / maxTotal) * 100);
+    return '<div class="bar-row">' +
+      '<div class="bar-label">' + b.label + '</div>' +
+      '<div class="bar-track"><div class="bar-fill-win" style="width:' + pct + '%"></div></div>' +
+      '<div class="bar-count">' + b.win + '勝' + b.loss + '敗</div>' +
+      '<div class="bar-pnl" style="color:' + color + '">' + (b.avgPnl>=0?'+':'') + b.avgPnl.toLocaleString() + '円</div>' +
+      '</div>';
+  }).join('');
+
+  el.innerHTML =
+    '<div class="stat-grid">' +
+      '<div class="stat-card"><div class="stat-lbl">平均保有（全体）</div><div class="stat-val">' + avgAll + '分</div></div>' +
+      '<div class="stat-card"><div class="stat-lbl">勝ちの平均保有</div><div class="stat-val" style="color:#27500A">' + (avgWin!=null?avgWin+'分':'-') + '</div></div>' +
+      '<div class="stat-card"><div class="stat-lbl">負けの平均保有</div><div class="stat-val" style="color:#791F1F">' + (avgLoss!=null?avgLoss+'分':'-') + '</div></div>' +
+    '</div>' +
+    '<div class="chart-title">保有時間帯別　勝敗数と平均損益</div>' +
+    barsHtml +
+    '<div style="font-size:11px;color:#b4b2a9;margin-top:10px;">棒の長さ＝勝ち数、数値＝その時間帯の平均損益</div>';
+}
+
+function renderEntries() {
+  const el = document.getElementById('entries-list');
+  if (!entries.length) { el.innerHTML = '<div class="no-data" style="padding:2rem 0;">まだ記録がありません</div>'; return; }
+  const badge = { win: '<span class="result-badge win">勝ち</span>', loss: '<span class="result-badge loss">負け</span>', even: '<span class="result-badge even">引分</span>', '': '' };
+  el.innerHTML = '<div class="entries-title">保存済みの記録（' + entries.length + '件）</div>' +
+    entries.map((e, i) => {
+      const pnlNum = parseFloat(e.pnl) || 0;
+      const pc = pnlNum > 0 ? '#27500A' : pnlNum < 0 ? '#791F1F' : '#888780';
+      const pnlStr = e.pnl ? '<span style="font-size:13px;margin-left:8px;color:' + pc + '">' + (pnlNum>=0?'+':'') + pnlNum.toLocaleString() + '円</span>' : '';
+      const timeStr = (e.entryTime && e.exitTime)
+        ? '<span style="font-size:11px;color:#888780;">' + e.entryTime + ' → ' + e.exitTime + (e.heldMins ? '（' + e.heldMins + '分）' : '') + '</span>' : '';
+      const ruleCount = (e.rules||[]).filter(Boolean).length;
+      return '<div class="entry-item">' +
+        '<div class="entry-row"><div>' +
+          '<span style="font-size:13px;font-weight:500;">' + e.date + '</span>' +
+          (e.ticker ? '<span style="font-size:12px;color:#888780;margin-left:8px;">' + e.ticker + '</span>' : '') +
+          (badge[e.result]||'') + pnlStr +
+        '</div><button class="entry-del" onclick="deleteEntry(' + i + ')">×</button></div>' +
+        '<div style="margin-top:4px;display:flex;gap:12px;align-items:center;">' + timeStr +
+          '<span style="font-size:11px;color:#888780;">ルール ' + ruleCount + '/5</span>' +
+          (e.mood ? '<span style="font-size:11px;color:#888780;">メンタル：' + e.mood + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+}
+</script>
+
+<div style="max-width:680px;margin:2rem auto 0;padding:1.5rem 1rem;border-top:0.5px solid #d3d1c7;font-size:11px;color:#b4b2a9;line-height:1.8;">
+  <p style="font-weight:500;margin-bottom:4px;">免責事項</p>
+  <p>本ツールは個人のトレード記録を管理するためのメモアプリです。投資・売買を推奨するものではありません。株式投資には元本割れのリスクがあります。投資判断はご自身の責任においておこなってください。本ツールの利用によって生じたいかなる損害についても、制作者は責任を負いかねます。</p>
+</div>
+</body>
+</html>
