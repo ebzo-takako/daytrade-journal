@@ -126,6 +126,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #BA7517
   <!-- 記録タブ：リアルタイム入力 -->
   <div class="tab-content active" id="tab-record">
     <div class="section">
+      <div class="section-title">今日の損失上限</div>
+      <div class="row2">
+        <div>
+          <label>損失上限（円）</label>
+          <input type="number" id="loss-limit" placeholder="例：10000" oninput="checkLossLimit()">
+        </div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:12px;">
+          <div id="loss-status" style="font-size:13px;"></div>
+        </div>
+      </div>
+      <div id="loss-warning"></div>
+    </div>
+    <div class="section">
       <div class="section-title">トレード記録（リアルタイム）</div>
       <div id="trade-blocks"></div>
       <button class="add-btn" onclick="addTradeBlock()">＋ もう1トレード追加</button>
@@ -264,6 +277,39 @@ function calcPnl(idx) {
   } else {
     pl.value = ''; pl.style.color = '#1a1a18';
     if (rb) rb.innerHTML = '';
+  }
+  checkLossLimit();
+}
+
+function checkLossLimit() {
+  const limit = parseFloat(g('loss-limit')) || 0;
+  if (!limit) {
+    document.getElementById('loss-status').innerHTML = '';
+    document.getElementById('loss-warning').innerHTML = '';
+    return;
+  }
+  let totalLoss = 0;
+  document.querySelectorAll('[id^="pl-"]').forEach(el => {
+    const v = parseFloat(el.value) || 0;
+    if (v < 0) totalLoss += Math.abs(v);
+  });
+  const remaining = limit - totalLoss;
+  const pct = totalLoss / limit;
+  const statusEl = document.getElementById('loss-status');
+  const warnEl = document.getElementById('loss-warning');
+
+  if (pct >= 1) {
+    statusEl.innerHTML = '<span style="color:#791F1F;font-weight:500;">損失上限到達</span>';
+    warnEl.innerHTML = '<div style="background:#FCEBEB;border:0.5px solid #F09595;border-radius:8px;padding:10px 14px;font-size:13px;color:#791F1F;font-weight:500;">本日の損失上限（' + limit.toLocaleString() + '円）に達しました。今日のトレードはここまでにしましょう。</div>';
+  } else if (pct >= 0.8) {
+    statusEl.innerHTML = '<span style="color:#BA7517;font-weight:500;">残り ' + remaining.toLocaleString() + '円</span>';
+    warnEl.innerHTML = '<div style="background:#FAEEDA;border:0.5px solid #EF9F27;border-radius:8px;padding:10px 14px;font-size:13px;color:#854F0B;">損失上限の80%に達しています。残り <strong>' + remaining.toLocaleString() + '円</strong> で今日は終わりにしましょう。</div>';
+  } else if (totalLoss > 0) {
+    statusEl.innerHTML = '<span style="color:#5f5e5a;">残り ' + remaining.toLocaleString() + '円</span>';
+    warnEl.innerHTML = '';
+  } else {
+    statusEl.innerHTML = '<span style="color:#888780;">上限まで ' + limit.toLocaleString() + '円</span>';
+    warnEl.innerHTML = '';
   }
 }
 
