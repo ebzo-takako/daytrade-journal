@@ -13,6 +13,7 @@
 <meta name="twitter:title" content="トレード日誌">
 <meta name="twitter:description" content="記録が、あなたのクセを暴く。保有時間×損益で勝ちパターンが見えてくる無料ツール。">
 <meta name="twitter:image" content="https://sukosuzutsu.com/ogp.png">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fffdf5; color: #1a1a18; font-size: 14px; line-height: 1.6; min-height: 100vh; padding: 2rem 1rem; }
@@ -155,6 +156,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #BA7517
     <button class="tab-btn" onclick="switchTab('review')">振り返る</button>
     <button class="tab-btn" onclick="switchTab('stats')">統計・分析</button>
     <button class="tab-btn" onclick="switchTab('history')">履歴</button>
+    <button class="tab-btn" onclick="switchTab('report')">月次レポート</button>
   </div>
 
   <!-- 記録タブ：リアルタイム入力 -->
@@ -216,6 +218,27 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #BA7517
   <!-- 履歴タブ -->
   <div class="tab-content" id="tab-history">
     <div id="entries-list"></div>
+  </div>
+
+  <!-- 月次レポートタブ -->
+  <div class="tab-content" id="tab-report">
+    <div class="section">
+      <div class="section-title">月次レポートを生成</div>
+      <div class="row2" style="margin-bottom:12px;">
+        <div>
+          <label>対象月</label>
+          <select id="report-month-sel"></select>
+        </div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:12px;">
+          <button class="save-btn" style="margin-top:0;" onclick="generateReport()">AIで分析してExcel出力</button>
+        </div>
+      </div>
+      <div id="report-status" style="font-size:13px;color:#888780;"></div>
+    </div>
+    <div id="report-preview" style="display:none;" class="section">
+      <div class="section-title">分析プレビュー</div>
+      <div id="report-preview-content"></div>
+    </div>
   </div>
 </div>
 
@@ -281,8 +304,9 @@ function addTradeBlock() {
   div.innerHTML =
     '<div class="trade-block-num">トレード ' + idx + '</div>' +
     (idx > 1 ? '<button class="trade-del-btn" onclick="removeTB(' + idx + ')">×</button>' : '') +
-    '<div class="row2">' +
-      '<div><label>銘柄コード</label><input type="text" id="tk-' + idx + '" placeholder="例：5803"></div>' +
+    '<div class="row3">' +
+      '<div><label>銘柄コード</label><input type="text" id="tk-' + idx + '" placeholder="例：5803" oninput="autoFillName(' + idx + ')"></div>' +
+      '<div><label>銘柄名</label><input type="text" id="tn-' + idx + '" placeholder="例：フジクラ" onblur="onNameBlur(' + idx + ')"></div>' +
       '<div><label>株数</label><input type="number" id="sh-' + idx + '" placeholder="株" oninput="calcPnl(' + idx + ')"></div>' +
     '</div>' +
     '<div style="margin-bottom:10px;">' +
@@ -309,6 +333,21 @@ function addTradeBlock() {
 function removeTB(idx) {
   const el = document.getElementById('tb-' + idx);
   if (el) el.remove();
+}
+
+function autoFillName(idx) {
+  const tk = (document.getElementById('tk-'+idx)||{}).value || '';
+  const tn = document.getElementById('tn-'+idx);
+  if (tn && tk && !tn.value) {
+    const saved = getStockName(tk);
+    if (saved) tn.value = saved;
+  }
+}
+
+function onNameBlur(idx) {
+  const tk = (document.getElementById('tk-'+idx)||{}).value || '';
+  const tn = (document.getElementById('tn-'+idx)||{}).value || '';
+  if (tk && tn) saveStockName(tk, tn);
 }
 
 function toggleCarryover(idx) {
@@ -427,8 +466,11 @@ function saveDraft() {
     const i = block.id.replace('tb-','');
     const et = g('et-'+i), xt = g('xt-'+i);
     const isCarryover = (document.getElementById('co-'+i)||{}).checked || false;
+    const tk = g('tk-'+i);
+    const tn = g('tn-'+i);
+    if (tk && tn) saveStockName(tk, tn);
     trades.push({
-      ticker: g('tk-'+i), shares: g('sh-'+i), pnl: isCarryover ? '' : g('pl-'+i),
+      ticker: tk, stockName: tn || getStockName(tk), shares: g('sh-'+i), pnl: isCarryover ? '' : g('pl-'+i),
       entryTime: et, exitTime: isCarryover ? '' : xt, heldMins: isCarryover ? null : calcHeld(et, xt),
       entryPrice: g('ep-'+i), exitPrice: isCarryover ? '' : g('xp-'+i),
       entryReason: '', exitReason: '',
@@ -464,6 +506,7 @@ function switchTab(name) {
   if (name === 'review') loadReviewDates();
   if (name === 'stats') renderStats();
   if (name === 'history') renderEntries();
+  if (name === 'report') initReportTab();
 }
 
 function loadReviewDates() {
@@ -720,37 +763,77 @@ function renderStats() {
     '<div style="font-size:11px;color:#b4b2a9;margin-top:10px;">棒の長さ＝勝ち数、数値＝その時間帯の平均損益</div>';
 }
 
+const stockNames = JSON.parse(localStorage.getItem('stock-names') || '{}');
+
+function getStockName(ticker) {
+  if (!ticker) return '';
+  return stockNames[ticker] || '';
+}
+
+function saveStockName(ticker, name) {
+  if (!ticker || !name) return;
+  stockNames[ticker] = name;
+  localStorage.setItem('stock-names', JSON.stringify(stockNames));
+}
+
+let openEntries = new Set();
+
+function toggleEntry(i) {
+  if (openEntries.has(i)) openEntries.delete(i);
+  else openEntries.add(i);
+  renderEntries();
+}
+
 function renderEntries() {
   const el = document.getElementById('entries-list');
   if (!entries.length) { el.innerHTML='<div class="no-data" style="padding:2rem 0;">まだ記録がありません</div>'; return; }
   const badge={win:'<span class="result-badge win">勝ち</span>',loss:'<span class="result-badge loss">負け</span>',even:'<span class="result-badge even">引分</span>',carryover:'<span class="carryover-badge">持ち越し中</span>'};
+
   el.innerHTML='<div class="entries-title">保存済みの記録（'+entries.length+'件）</div>'+
     entries.map((e,i)=>{
       const pn=e.totalPnl||0, pc=pn>0?'#27500A':pn<0?'#791F1F':'#888780';
       const draft=e.isDraft?'<span style="font-size:11px;color:#BA7517;margin-left:6px;">振り返り未完了</span>':'';
-      const tsub=(e.trades||[]).map(t=>{
+      const isOpen = openEntries.has(i);
+      const arrow = isOpen ? '▼' : '▶';
+
+      const tickers = (e.trades||[]).filter(t=>t.ticker).map(t=>{
+        const name = t.stockName || getStockName(t.ticker);
+        return name ? t.ticker+'('+name+')' : t.ticker;
+      }).join('・');
+
+      const tsub = isOpen ? (e.trades||[]).map(t=>{
         const tc=(parseFloat(t.pnl)||0)>0?'#27500A':(parseFloat(t.pnl)||0)<0?'#791F1F':'#888780';
         const resultKey = t.isCarryover && !t.settled ? 'carryover' : t.result;
         const settledTag = t.isCarryover && t.settled ? '<span style="font-size:11px;color:#5B3DB5;margin-left:4px;">（持ち越し→決済済）</span>' : '';
+        const name = t.stockName || getStockName(t.ticker);
+        const nameTag = name ? '<span style="font-size:11px;color:#888780;margin-left:4px;">'+escHtml(name)+'</span>' : '';
         return '<div class="trade-sub">'+
-          (t.ticker?'<span style="font-weight:500;">'+t.ticker+'</span>':'')+
+          (t.ticker?'<span style="font-weight:500;">'+escHtml(t.ticker)+'</span>'+nameTag:'')+
           (badge[resultKey]||'')+settledTag+
           (t.pnl?'<span style="color:'+tc+';margin-left:6px;">'+(+(parseFloat(t.pnl)||0)>=0?'+':'')+(parseFloat(t.pnl)||0).toLocaleString()+'円</span>':'')+
           (t.entryTime&&t.exitTime?'<span style="color:#888780;margin-left:8px;">'+t.entryTime+'→'+t.exitTime+(t.heldMins?'（'+t.heldMins+'分）':'')+'</span>':t.entryTime?'<span style="color:#888780;margin-left:8px;">IN '+t.entryTime+'</span>':'')+
           (t.entryReason?'<div style="margin-top:4px;color:#5f5e5a;">IN: '+t.entryReason+'</div>':'')+
           (t.exitReason?'<div style="color:#5f5e5a;">OUT: '+t.exitReason+'</div>':'')+
         '</div>';
-      }).join('');
+      }).join('') : '';
+
       const rc=(e.rules||[]).filter(Boolean).length;
+      const footer = isOpen
+        ? '<div style="margin-top:6px;font-size:11px;color:#888780;">ルール '+rc+'/5'+(e.mood?'　メンタル：'+e.mood:'')+'</div>'
+        : '';
+
       return '<div class="entry-item">'+
-        '<div class="entry-row"><div>'+
-          '<span style="font-size:13px;font-weight:500;">'+e.date+'</span>'+
-          '<span style="font-size:13px;margin-left:8px;color:'+pc+'">'+(pn>=0?'+':'')+pn.toLocaleString()+'円</span>'+
-          '<span style="font-size:11px;color:#888780;margin-left:8px;">'+(e.trades||[]).length+'トレード</span>'+
-          draft+
-        '</div><button class="entry-del" onclick="deleteEntry('+i+')">×</button></div>'+
-        tsub+
-        '<div style="margin-top:6px;font-size:11px;color:#888780;">ルール '+rc+'/5'+(e.mood?'　メンタル：'+e.mood:'')+'</div>'+
+        '<div class="entry-row" style="cursor:pointer;" onclick="toggleEntry('+i+')">'+
+          '<div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">'+
+            '<span style="font-size:11px;color:#b4b2a9;flex-shrink:0;">'+arrow+'</span>'+
+            '<span style="font-size:13px;font-weight:500;flex-shrink:0;">'+e.date+'</span>'+
+            '<span style="font-size:13px;color:'+pc+';flex-shrink:0;">'+(pn>=0?'+':'')+pn.toLocaleString()+'円</span>'+
+            (tickers&&!isOpen?'<span style="font-size:11px;color:#888780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(tickers)+'</span>':'')+
+            draft+
+          '</div>'+
+          '<button class="entry-del" onclick="event.stopPropagation();deleteEntry('+i+')">×</button>'+
+        '</div>'+
+        tsub+footer+
       '</div>';
     }).join('');
 }
@@ -760,6 +843,184 @@ function toggleAbout() {
   const a = document.getElementById('about-arrow');
   if (c.style.display === 'none') { c.style.display='block'; a.textContent='▼'; }
   else { c.style.display='none'; a.textContent='▶'; }
+}
+
+function initReportTab() {
+  const sel = document.getElementById('report-month-sel');
+  const months = [...new Set(entries.map(e => e.date ? e.date.slice(0,7) : null).filter(Boolean))].sort().reverse();
+  sel.innerHTML = months.length
+    ? months.map(m => '<option value="'+m+'">'+m+'</option>').join('')
+    : '<option value="">記録がありません</option>';
+}
+
+async function generateReport() {
+  const ym = (document.getElementById('report-month-sel')||{}).value;
+  if (!ym) return;
+  const monthEntries = entries.filter(e => e.date && e.date.startsWith(ym));
+  if (!monthEntries.length) { alert('この月の記録がありません'); return; }
+
+  const statusEl = document.getElementById('report-status');
+  const previewEl = document.getElementById('report-preview');
+  const previewContent = document.getElementById('report-preview-content');
+  statusEl.innerHTML = '<span style="color:#BA7517;">⏳ AIが分析中です。少しお待ちください…</span>';
+  previewEl.style.display = 'none';
+
+  const totalPnl = monthEntries.reduce((s,e) => s+(e.totalPnl||0), 0);
+  const wins = monthEntries.filter(e => (e.totalPnl||0) > 0).length;
+  const losses = monthEntries.filter(e => (e.totalPnl||0) < 0).length;
+  const allTrades = [];
+  monthEntries.forEach(e => (e.trades||[]).forEach(t => allTrades.push({...t, date: e.date})));
+  const tickers = [...new Set(allTrades.map(t => t.ticker).filter(Boolean))];
+
+  const tradeLines = allTrades.map(t =>
+    `日付:${t.date} 銘柄:${t.ticker||''}${t.stockName?'('+t.stockName+')':''} 結果:${t.result||''} 損益:${t.pnl||0}円 保有:${t.heldMins!=null?t.heldMins+'分':'持ち越し'} IN理由:${t.entryReason||''} OUT理由:${t.exitReason||''}`
+  ).join('\n');
+
+  const emotionLines = monthEntries.filter(e => e.emotionNote||e.improvement||e.learning).map(e =>
+    `日付:${e.date} 感情:${e.emotionNote||''} 改善点:${e.improvement||''} 学習:${e.learning||''}`
+  ).join('\n');
+
+  const prompt = `以下は${ym}のトレード記録です。日本株の個人トレーダーとして分析してください。
+
+【月次サマリー】
+取引日数: ${monthEntries.length}日 / 勝ち:${wins}日 負け:${losses}日
+月次損益: ${totalPnl >= 0 ? '+' : ''}${totalPnl.toLocaleString()}円
+取引銘柄: ${tickers.join(', ') || 'なし'}
+
+【トレード詳細】
+${tradeLines}
+
+【振り返りメモ】
+${emotionLines || 'なし'}
+
+以下の4項目を、それぞれ200〜300字程度で具体的に分析してください。記録に基づいた根拠のある内容にしてください。
+
+1. 資産の増減サマリー（数字を交えて）
+2. さわった銘柄の傾向と特徴
+3. 勝因と敗因の分析（具体的なトレードに言及）
+4. 来月に向けたアドバイス（3つ以上の具体的な改善案）
+
+出力はJSONで返してください（他のテキスト不要）:
+{"summary":"...","tickers":"...","analysis":"...","advice":"..."}`;
+
+  let aiResult = null;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    const text = (data.content||[]).map(c => c.text||'').join('');
+    const clean = text.replace(/```json|```/g,'').trim();
+    aiResult = JSON.parse(clean);
+  } catch(e) {
+    statusEl.innerHTML = '<span style="color:#791F1F;">AI分析に失敗しました。しばらく待ってから再試行してください。</span>';
+    return;
+  }
+
+  previewContent.innerHTML =
+    '<div style="margin-bottom:12px;"><div style="font-size:11px;font-weight:500;color:#888780;margin-bottom:4px;">資産の増減サマリー</div><div style="font-size:13px;line-height:1.8;color:#1a1a18;">'+escHtml(aiResult.summary)+'</div></div>'+
+    '<div style="margin-bottom:12px;"><div style="font-size:11px;font-weight:500;color:#888780;margin-bottom:4px;">さわった銘柄の傾向</div><div style="font-size:13px;line-height:1.8;color:#1a1a18;">'+escHtml(aiResult.tickers)+'</div></div>'+
+    '<div style="margin-bottom:12px;"><div style="font-size:11px;font-weight:500;color:#888780;margin-bottom:4px;">勝因と敗因の分析</div><div style="font-size:13px;line-height:1.8;color:#1a1a18;">'+escHtml(aiResult.analysis)+'</div></div>'+
+    '<div style="margin-bottom:12px;"><div style="font-size:11px;font-weight:500;color:#888780;margin-bottom:4px;">来月に向けたアドバイス</div><div style="font-size:13px;line-height:1.8;color:#1a1a18;">'+escHtml(aiResult.advice)+'</div></div>'+
+    '<button class="save-btn" style="margin-top:8px;" onclick="downloadExcel('+JSON.stringify(ym)+')">Excelでダウンロード</button>';
+  previewEl.style.display = 'block';
+  previewEl._aiResult = aiResult;
+  previewEl._ym = ym;
+  statusEl.innerHTML = '<span style="color:#27500A;">✓ 分析完了！プレビューを確認してExcelをダウンロードできます</span>';
+}
+
+function downloadExcel(ym) {
+  const previewEl = document.getElementById('report-preview');
+  const aiResult = previewEl._aiResult;
+  if (!aiResult) return;
+
+  const monthEntries = entries.filter(e => e.date && e.date.startsWith(ym));
+  const totalPnl = monthEntries.reduce((s,e)=>s+(e.totalPnl||0),0);
+  const wins = monthEntries.filter(e=>(e.totalPnl||0)>0).length;
+  const losses = monthEntries.filter(e=>(e.totalPnl||0)<0).length;
+  const allTrades = [];
+  monthEntries.forEach(e=>(e.trades||[]).forEach(t=>allTrades.push({...t,date:e.date})));
+
+  const XLSX = window.XLSX;
+  const wb = XLSX.utils.book_new();
+
+  // Sheet1: サマリー
+  const sumData = [
+    [ym + ' 月次トレードレポート'],
+    [],
+    ['対象月', ym],
+    ['取引日数', monthEntries.length + '日'],
+    ['勝ち', wins + '日'],
+    ['負け', losses + '日'],
+    ['引き分け', (monthEntries.length - wins - losses) + '日'],
+    ['勝率', monthEntries.length ? Math.round(wins/monthEntries.length*100)+'%' : '-'],
+    ['月次損益', (totalPnl>=0?'+':'')+totalPnl.toLocaleString()+'円'],
+    [],
+    ['■ 資産の増減サマリー'],
+    [aiResult.summary],
+    [],
+    ['■ さわった銘柄の傾向'],
+    [aiResult.tickers],
+    [],
+    ['■ 勝因と敗因の分析'],
+    [aiResult.analysis],
+    [],
+    ['■ 来月に向けたアドバイス'],
+    [aiResult.advice],
+  ];
+  const ws1 = XLSX.utils.aoa_to_sheet(sumData);
+  ws1['!cols'] = [{wch:20},{wch:70}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'サマリー・分析');
+
+  // Sheet2: 日別記録
+  const dayHeaders = ['日付','損益(円)','トレード数','勝敗','ルール遵守','メンタル','感情メモ','改善点','学習'];
+  const dayRows = monthEntries.map(e => {
+    const pn = e.totalPnl||0;
+    const rc = (e.rules||[]).filter(Boolean).length;
+    return [
+      e.date,
+      pn,
+      (e.trades||[]).length,
+      pn>0?'勝ち':pn<0?'負け':'引分',
+      rc+'/5',
+      e.mood||'',
+      e.emotionNote||'',
+      e.improvement||'',
+      e.learning||''
+    ];
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet([dayHeaders, ...dayRows]);
+  ws2['!cols'] = [{wch:12},{wch:12},{wch:12},{wch:8},{wch:10},{wch:8},{wch:30},{wch:30},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, ws2, '日別記録');
+
+  // Sheet3: トレード明細
+  const tradeHeaders = ['日付','銘柄コード','銘柄名','株数','エントリー時刻','決済時刻','保有時間(分)','エントリー価格','決済価格','損益(円)','結果','エントリー理由','決済理由'];
+  const tradeRows = allTrades.map(t => [
+    t.date,
+    t.ticker||'',
+    t.stockName||getStockName(t.ticker)||'',
+    t.shares||'',
+    t.entryTime||'',
+    t.exitTime||'',
+    t.heldMins!=null?t.heldMins:'持ち越し',
+    t.entryPrice||'',
+    t.exitPrice||'',
+    parseFloat(t.pnl)||0,
+    t.result==='win'?'勝ち':t.result==='loss'?'負け':t.result==='carryover'?'持ち越し':'引分',
+    t.entryReason||'',
+    t.exitReason||''
+  ]);
+  const ws3 = XLSX.utils.aoa_to_sheet([tradeHeaders, ...tradeRows]);
+  ws3['!cols'] = [{wch:12},{wch:10},{wch:16},{wch:8},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:12},{wch:8},{wch:30},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'トレード明細');
+
+  XLSX.writeFile(wb, 'トレードレポート_' + ym + '.xlsx');
 }
 </script>
 
