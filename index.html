@@ -90,6 +90,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #BA7517
 .trade-sub { background: #fffdf5; border-radius: 6px; padding: 6px 10px; margin-top: 6px; font-size: 12px; }
 .review-block { background: #fffdf5; border: 0.5px solid #e8e4d8; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
 .review-header { font-size: 12px; font-weight: 500; color: #BA7517; margin-bottom: 10px; }
+.carryover-badge { display: inline-block; background: #EDE9F8; color: #5B3DB5; border-radius: 8px; padding: 2px 8px; font-size: 11px; font-weight: 500; margin-left: 4px; }
+.carryover-block { background: #F5F3FC; border: 0.5px solid #C5BAE8; border-radius: 10px; padding: 12px; margin-bottom: 10px; position: relative; }
+.carryover-section { background: #F5F3FC; border: 0.5px solid #C5BAE8; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+.carryover-title { font-size: 12px; font-weight: 500; color: #5B3DB5; margin-bottom: 12px; }
+.settle-btn { padding: 6px 12px; border: 0.5px solid #5B3DB5; border-radius: 8px; background: #EDE9F8; color: #5B3DB5; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.settle-btn:hover { background: #5B3DB5; color: #fff; }
 @media (max-width: 480px) {
   .row2, .row3, .row4 { grid-template-columns: 1fr 1fr; }
   .header { flex-direction: column; gap: 12px; }
@@ -125,6 +131,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #BA7517
 
   <!-- 記録タブ：リアルタイム入力 -->
   <div class="tab-content active" id="tab-record">
+    <div id="carryover-section-wrap"></div>
     <div class="section">
       <div class="section-title">今日の損失上限</div>
       <div class="row2">
@@ -196,6 +203,7 @@ let entries = JSON.parse(localStorage.getItem('daytrade-v3') || '[]');
   addTradeBlock();
   updateMonthly();
   renderEntries();
+  renderCarryoverSection();
 })();
 
 function nowTime() {
@@ -218,16 +226,23 @@ function addTradeBlock() {
       '<div><label>銘柄コード</label><input type="text" id="tk-' + idx + '" placeholder="例：5803"></div>' +
       '<div><label>株数</label><input type="number" id="sh-' + idx + '" placeholder="株" oninput="calcPnl(' + idx + ')"></div>' +
     '</div>' +
+    '<div style="margin-bottom:10px;">' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#5B3DB5;">' +
+        '<input type="checkbox" id="co-' + idx + '" style="width:16px;height:16px;margin:0;accent-color:#5B3DB5;" onchange="toggleCarryover(' + idx + ')">' +
+        '翌日に持ち越す（未決済）' +
+      '</label>' +
+    '</div>' +
     '<div class="row2">' +
       '<div><label>エントリー時刻</label><div class="time-row"><input type="time" id="et-' + idx + '" oninput="upHeld(' + idx + ')"><button class="now-btn" onclick="setNow(\'et-' + idx + '\',' + idx + ')">今の時刻</button></div></div>' +
-      '<div><label>アウト時刻</label><div class="time-row"><input type="time" id="xt-' + idx + '" oninput="upHeld(' + idx + ')"><button class="now-btn" onclick="setNow(\'xt-' + idx + '\',' + idx + ')">今の時刻</button></div></div>' +
+      '<div id="exit-time-wrap-' + idx + '"><label>アウト時刻</label><div class="time-row"><input type="time" id="xt-' + idx + '" oninput="upHeld(' + idx + ')"><button class="now-btn" onclick="setNow(\'xt-' + idx + '\',' + idx + ')">今の時刻</button></div></div>' +
     '</div>' +
     '<div id="hd-' + idx + '"></div>' +
-    '<div class="row3">' +
+    '<div id="price-row-' + idx + '" class="row3">' +
       '<div><label>エントリー価格</label><input type="number" id="ep-' + idx + '" placeholder="円" oninput="calcPnl(' + idx + ')"></div>' +
-      '<div><label>決済価格</label><input type="number" id="xp-' + idx + '" placeholder="円" oninput="calcPnl(' + idx + ')"></div>' +
-      '<div><label>損益（自動）</label><input type="number" id="pl-' + idx + '" placeholder="±円" readonly></div>' +
+      '<div id="exit-price-wrap-' + idx + '"><label>決済価格</label><input type="number" id="xp-' + idx + '" placeholder="円" oninput="calcPnl(' + idx + ')"></div>' +
+      '<div id="pnl-wrap-' + idx + '"><label>損益（自動）</label><input type="number" id="pl-' + idx + '" placeholder="±円" readonly></div>' +
     '</div>' +
+    '<div id="co-note-' + idx + '" style="display:none;background:#EDE9F8;border-radius:8px;padding:8px 12px;font-size:12px;color:#5B3DB5;margin-bottom:10px;">持ち越し中 ― 翌日決済後に振り返りタブから損益を記録できます</div>' +
     '<div id="result-badge-' + idx + '"></div>';
   document.getElementById('trade-blocks').appendChild(div);
 }
@@ -235,6 +250,39 @@ function addTradeBlock() {
 function removeTB(idx) {
   const el = document.getElementById('tb-' + idx);
   if (el) el.remove();
+}
+
+function toggleCarryover(idx) {
+  const isCarryover = document.getElementById('co-' + idx).checked;
+  const exitTimeWrap = document.getElementById('exit-time-wrap-' + idx);
+  const exitPriceWrap = document.getElementById('exit-price-wrap-' + idx);
+  const pnlWrap = document.getElementById('pnl-wrap-' + idx);
+  const coNote = document.getElementById('co-note-' + idx);
+  const priceRow = document.getElementById('price-row-' + idx);
+  const resultBadge = document.getElementById('result-badge-' + idx);
+  if (isCarryover) {
+    if (exitTimeWrap) exitTimeWrap.style.display = 'none';
+    if (exitPriceWrap) exitPriceWrap.style.display = 'none';
+    if (pnlWrap) pnlWrap.style.display = 'none';
+    if (coNote) coNote.style.display = 'block';
+    if (resultBadge) resultBadge.innerHTML = '';
+    // Switch price row to row2
+    if (priceRow) { priceRow.className = 'row2'; }
+    // Clear exit fields
+    const xt = document.getElementById('xt-' + idx);
+    const xp = document.getElementById('xp-' + idx);
+    const pl = document.getElementById('pl-' + idx);
+    if (xt) xt.value = '';
+    if (xp) xp.value = '';
+    if (pl) pl.value = '';
+    upHeld(idx);
+  } else {
+    if (exitTimeWrap) exitTimeWrap.style.display = '';
+    if (exitPriceWrap) exitPriceWrap.style.display = '';
+    if (pnlWrap) pnlWrap.style.display = '';
+    if (coNote) coNote.style.display = 'none';
+    if (priceRow) { priceRow.className = 'row3'; }
+  }
 }
 
 function setNow(inputId, idx) {
@@ -319,12 +367,14 @@ function saveDraft() {
   document.querySelectorAll('.trade-block').forEach(block => {
     const i = block.id.replace('tb-','');
     const et = g('et-'+i), xt = g('xt-'+i);
+    const isCarryover = (document.getElementById('co-'+i)||{}).checked || false;
     trades.push({
-      ticker: g('tk-'+i), shares: g('sh-'+i), pnl: g('pl-'+i),
-      entryTime: et, exitTime: xt, heldMins: calcHeld(et, xt),
-      entryPrice: g('ep-'+i), exitPrice: g('xp-'+i),
+      ticker: g('tk-'+i), shares: g('sh-'+i), pnl: isCarryover ? '' : g('pl-'+i),
+      entryTime: et, exitTime: isCarryover ? '' : xt, heldMins: isCarryover ? null : calcHeld(et, xt),
+      entryPrice: g('ep-'+i), exitPrice: isCarryover ? '' : g('xp-'+i),
       entryReason: '', exitReason: '',
-      result: parseFloat(g('pl-'+i)) > 0 ? 'win' : parseFloat(g('pl-'+i)) < 0 ? 'loss' : parseFloat(g('pl-'+i)) == 0 && g('pl-'+i) !== '' ? 'even' : ''
+      isCarryover: isCarryover,
+      result: isCarryover ? 'carryover' : (parseFloat(g('pl-'+i)) > 0 ? 'win' : parseFloat(g('pl-'+i)) < 0 ? 'loss' : parseFloat(g('pl-'+i)) == 0 && g('pl-'+i) !== '' ? 'even' : '')
     });
   });
   const totalPnl = trades.reduce((s,t)=>s+(parseFloat(t.pnl)||0),0);
@@ -338,7 +388,7 @@ function saveDraft() {
   else entries.unshift(entry);
   entries.sort((a,b)=>b.date.localeCompare(a.date));
   save();
-  updateMonthly(); renderEntries();
+  updateMonthly(); renderEntries(); renderCarryoverSection();
   const t = document.getElementById('toast-record');
   t.style.display = 'block';
   setTimeout(()=>t.style.display='none', 3000);
@@ -447,6 +497,75 @@ function saveReview(date) {
 
 function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+function renderCarryoverSection() {
+  const wrap = document.getElementById('carryover-section-wrap');
+  if (!wrap) return;
+  // Collect all open carryover trades across all entries
+  const openCarryovers = [];
+  entries.forEach(entry => {
+    (entry.trades || []).forEach((t, ti) => {
+      if (t.isCarryover && !t.settled) {
+        openCarryovers.push({ entry, ti, t });
+      }
+    });
+  });
+  if (!openCarryovers.length) { wrap.innerHTML = ''; return; }
+  let html = '<div class="carryover-section"><div class="carryover-title">📌 持ち越し中のポジション（' + openCarryovers.length + '件）</div>';
+  openCarryovers.forEach(({ entry, ti, t }) => {
+    const safeDate = entry.date.replace(/-/g,'');
+    html += '<div class="carryover-block">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+        '<div><span style="font-weight:500;font-size:13px;">' + (t.ticker||'銘柄未記入') + '</span>' +
+        '<span class="carryover-badge">持ち越し中</span>' +
+        '<span style="font-size:12px;color:#888780;margin-left:6px;">' + entry.date + '　' + (t.entryTime||'') + ' @' + (t.entryPrice||'-') + '円　' + (t.shares||'-') + '株</span></div>' +
+      '</div>' +
+      '<div class="row3" style="margin-bottom:8px;">' +
+        '<div><label>決済価格（円）</label><input type="number" id="co-xp-' + entry.date + '-' + ti + '" placeholder="円" oninput="calcCoSettle(\'' + entry.date + '\',' + ti + ',' + (t.entryPrice||0) + ',' + (t.shares||0) + ')"></div>' +
+        '<div><label>決済時刻</label><input type="time" id="co-xt-' + entry.date + '-' + ti + '"></div>' +
+        '<div><label>損益（自動）</label><input type="number" id="co-pl-' + entry.date + '-' + ti + '" placeholder="±円" readonly></div>' +
+      '</div>' +
+      '<button class="settle-btn" onclick="settleCarryover(\'' + entry.date + '\',' + ti + ')">決済を記録する</button>' +
+    '</div>';
+  });
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+function calcCoSettle(date, ti, ep, sh) {
+  const xpEl = document.getElementById('co-xp-' + date + '-' + ti);
+  const plEl = document.getElementById('co-pl-' + date + '-' + ti);
+  if (!xpEl || !plEl) return;
+  const xp = parseFloat(xpEl.value) || 0;
+  if (xp && ep && sh) {
+    const pnl = Math.round((xp - ep) * sh);
+    plEl.value = pnl;
+    plEl.style.color = pnl > 0 ? '#27500A' : pnl < 0 ? '#791F1F' : '#1a1a18';
+  } else {
+    plEl.value = ''; plEl.style.color = '#1a1a18';
+  }
+}
+
+function settleCarryover(date, ti) {
+  const xpEl = document.getElementById('co-xp-' + date + '-' + ti);
+  const xtEl = document.getElementById('co-xt-' + date + '-' + ti);
+  const plEl = document.getElementById('co-pl-' + date + '-' + ti);
+  if (!xpEl || !xpEl.value) { alert('決済価格を入力してください'); return; }
+  const idx = entries.findIndex(e => e.date === date);
+  if (idx < 0) return;
+  const t = entries[idx].trades[ti];
+  t.exitPrice = xpEl.value;
+  t.exitTime = xtEl ? xtEl.value : '';
+  t.pnl = plEl ? plEl.value : '';
+  t.heldMins = null; // overnight, not measured in minutes
+  t.isCarryover = true;
+  t.settled = true;
+  t.result = parseFloat(t.pnl) > 0 ? 'win' : parseFloat(t.pnl) < 0 ? 'loss' : 'even';
+  // Recalculate totalPnl for the entry
+  entries[idx].totalPnl = (entries[idx].trades || []).reduce((s, tr) => s + (parseFloat(tr.pnl) || 0), 0);
+  save(); updateMonthly(); renderEntries(); renderCarryoverSection();
+  alert('決済を記録しました！');
+}
+
 function setMood(el, val) {
   mood = val;
   document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('active'));
@@ -455,7 +574,7 @@ function setMood(el, val) {
 
 function deleteEntry(i) {
   if (!confirm('この記録を削除しますか？')) return;
-  entries.splice(i,1); save(); renderEntries(); updateMonthly();
+  entries.splice(i,1); save(); renderEntries(); updateMonthly(); renderCarryoverSection();
   if (document.getElementById('tab-stats').classList.contains('active')) renderStats();
 }
 
@@ -545,18 +664,20 @@ function renderStats() {
 function renderEntries() {
   const el = document.getElementById('entries-list');
   if (!entries.length) { el.innerHTML='<div class="no-data" style="padding:2rem 0;">まだ記録がありません</div>'; return; }
-  const badge={win:'<span class="result-badge win">勝ち</span>',loss:'<span class="result-badge loss">負け</span>',even:'<span class="result-badge even">引分</span>'};
+  const badge={win:'<span class="result-badge win">勝ち</span>',loss:'<span class="result-badge loss">負け</span>',even:'<span class="result-badge even">引分</span>',carryover:'<span class="carryover-badge">持ち越し中</span>'};
   el.innerHTML='<div class="entries-title">保存済みの記録（'+entries.length+'件）</div>'+
     entries.map((e,i)=>{
       const pn=e.totalPnl||0, pc=pn>0?'#27500A':pn<0?'#791F1F':'#888780';
       const draft=e.isDraft?'<span style="font-size:11px;color:#BA7517;margin-left:6px;">振り返り未完了</span>':'';
       const tsub=(e.trades||[]).map(t=>{
         const tc=(parseFloat(t.pnl)||0)>0?'#27500A':(parseFloat(t.pnl)||0)<0?'#791F1F':'#888780';
+        const resultKey = t.isCarryover && !t.settled ? 'carryover' : t.result;
+        const settledTag = t.isCarryover && t.settled ? '<span style="font-size:11px;color:#5B3DB5;margin-left:4px;">（持ち越し→決済済）</span>' : '';
         return '<div class="trade-sub">'+
           (t.ticker?'<span style="font-weight:500;">'+t.ticker+'</span>':'')+
-          (badge[t.result]||'')+
+          (badge[resultKey]||'')+settledTag+
           (t.pnl?'<span style="color:'+tc+';margin-left:6px;">'+(+(parseFloat(t.pnl)||0)>=0?'+':'')+(parseFloat(t.pnl)||0).toLocaleString()+'円</span>':'')+
-          (t.entryTime&&t.exitTime?'<span style="color:#888780;margin-left:8px;">'+t.entryTime+'→'+t.exitTime+(t.heldMins?'（'+t.heldMins+'分）':'')+'</span>':'')+
+          (t.entryTime&&t.exitTime?'<span style="color:#888780;margin-left:8px;">'+t.entryTime+'→'+t.exitTime+(t.heldMins?'（'+t.heldMins+'分）':'')+'</span>':t.entryTime?'<span style="color:#888780;margin-left:8px;">IN '+t.entryTime+'</span>':'')+
           (t.entryReason?'<div style="margin-top:4px;color:#5f5e5a;">IN: '+t.entryReason+'</div>':'')+
           (t.exitReason?'<div style="color:#5f5e5a;">OUT: '+t.exitReason+'</div>':'')+
         '</div>';
@@ -574,24 +695,23 @@ function renderEntries() {
       '</div>';
     }).join('');
 }
+
+function toggleAbout() {
+  const c = document.getElementById('about-content');
+  const a = document.getElementById('about-arrow');
+  if (c.style.display === 'none') { c.style.display='block'; a.textContent='▼'; }
+  else { c.style.display='none'; a.textContent='▶'; }
+}
 </script>
 
-<div style="max-width:680px;margin:2rem auto 0;padding:1.5rem 1rem;border-top:0.5px solid #d3d1c7;">
-  <h2 style="font-size:18px;font-weight:500;margin-bottom:1.5rem;">このツールを作った理由</h2>
-  <div style="font-size:14px;line-height:2;color:#1a1a18;">
-    <p style="margin-bottom:1rem;">株を始めたころ、私には「わかってる」ことがたくさんありました。</p>
-    <p style="margin-bottom:1rem;">損切りは早く。欲張らない。感情で動かない。ルールを守る。</p>
-    <p style="margin-bottom:1rem;">頭ではわかってる。でも、毎回同じところで同じ失敗をする。</p>
-    <p style="margin-bottom:1rem;">「またやった」と気づくのは、いつも決済したあと。エントリーした瞬間はあんなに冷静だったのに、気づいたら塩漬けにしていたり、利益が出ているのに欲張って持ち続けて結局マイナスで終わったり。</p>
-    <p style="margin-bottom:1rem;">不思議なことに、失敗のパターンはいつも同じでした。</p>
-    <p style="margin-bottom:1rem;">でも、記録していなかったから証明できなかった。「なんとなく同じ失敗をしている気がする」止まりで、自分のクセが見えていなかったんです。</p>
-    <p style="margin-bottom:1rem;">本当は知っています。いい株を長期で持ち続ければ、それが一番シンプルで強い戦略だと。でも、それだけじゃ物足りない。デイトレで自分の判断を試したい。相場と向き合いながら、毎日コツコツ稼げるようになりたい。</p>
-    <p style="margin-bottom:1rem;">その欲張りな気持ちと正直に向き合うために、記録をつけることにしました。</p>
-    <p style="margin-bottom:1rem;">だから作りました。</p>
-    <p style="margin-bottom:1rem;">何分持ったか。なぜ入ったか。なぜ出たか。そのときの気持ちは。</p>
-    <p style="margin-bottom:1rem;">記録を積み重ねていくと、自分でも気づいていなかったパターンが見えてきます。「15分以上持つと私は負ける」「メンタルが普通以下の日はエントリーしない方がいい」そういう、自分だけのルールが見つかります。</p>
-    <p style="margin-bottom:1rem;">このツールは、同じ失敗を繰り返している自分を、記録の力で強制的に止めるために作りました。</p>
-    <p>完璧なトレーダーになるためじゃなく、昨日の自分より少しだけマシになるために。無理せず毎日少しずつ。</p>
+<div style="max-width:680px;margin:2rem auto 0;padding:1rem;border-top:0.5px solid #d3d1c7;">
+  <button onclick="toggleAbout()" style="background:none;border:none;cursor:pointer;font-size:13px;color:#888780;padding:0;display:flex;align-items:center;gap:6px;">
+    <span id="about-arrow">▶</span> このツールについて
+  </button>
+  <div id="about-content" style="display:none;margin-top:1rem;font-size:13px;line-height:1.9;color:#5f5e5a;">
+    <p style="margin-bottom:0.8rem;">同じ失敗を何度も繰り返す自分に気づいたとき、記録していなかったことが原因だと気づきました。</p>
+    <p style="margin-bottom:0.8rem;">いい株を長期で持てば勝てることはわかってる。でもデイトレで自分の判断を試したい。その欲張りな気持ちと向き合うために、このツールを作りました。</p>
+    <p>何分持ったか。なぜ入ったか。なぜ出たか。記録を積み重ねると、自分だけの勝ちパターンが見えてきます。完璧なトレーダーになるためじゃなく、昨日の自分より少しだけマシになるために。</p>
   </div>
 </div>
 
