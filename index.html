@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>デイトレ日誌</title>
-<meta property="og:title" content="デイトレ日誌">
+<title>トレード日誌</title>
+<meta property="og:title" content="トレード日誌">
 <meta property="og:description" content="記録が、あなたのクセを暴く。保有時間×損益で勝ちパターンが見えてくる無料ツール。">
 <meta property="og:image" content="https://sukosuzutsu.com/ogp.png">
 <meta property="og:url" content="https://sukosuzutsu.com">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="デイトレ日誌">
+<meta name="twitter:title" content="トレード日誌">
 <meta name="twitter:description" content="記録が、あなたのクセを暴く。保有時間×損益で勝ちパターンが見えてくる無料ツール。">
 <meta name="twitter:image" content="https://sukosuzutsu.com/ogp.png">
 <style>
@@ -91,6 +91,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #BA7517
 .review-block { background: #fffdf5; border: 0.5px solid #e8e4d8; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
 .review-header { font-size: 12px; font-weight: 500; color: #BA7517; margin-bottom: 10px; }
 .carryover-badge { display: inline-block; background: #EDE9F8; color: #5B3DB5; border-radius: 8px; padding: 2px 8px; font-size: 11px; font-weight: 500; margin-left: 4px; }
+.market-section { background: #fff; border: 0.5px solid #d3d1c7; border-radius: 12px; padding: 0.75rem 1.25rem; margin-bottom: 1rem; }
+.market-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 12px; }
+.market-item { display: flex; flex-direction: column; gap: 2px; }
+.market-lbl { font-size: 10px; color: #888780; }
+.market-val { font-size: 13px; font-weight: 500; }
+.market-val input[type=number] { font-size: 13px; font-weight: 500; padding: 3px 6px; border: 0.5px solid #b4b2a9; border-radius: 6px; background: #fffdf5; color: #1a1a18; width: 100%; margin-bottom: 0; }
+.market-val input[type=number]:focus { outline: none; border-color: #BA7517; box-shadow: 0 0 0 2px rgba(186,117,23,0.12); }
+.market-up { color: #27500A; }
+.market-down { color: #791F1F; }
+.market-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.market-save-btn { font-size: 11px; padding: 3px 10px; border: 0.5px solid #BA7517; border-radius: 6px; background: transparent; color: #BA7517; cursor: pointer; }
+.market-save-btn:hover { background: #FAEEDA; }
+@media (max-width: 480px) { .market-grid { grid-template-columns: repeat(2, 1fr); } }
 .carryover-block { background: #F5F3FC; border: 0.5px solid #C5BAE8; border-radius: 10px; padding: 12px; margin-bottom: 10px; position: relative; }
 .carryover-section { background: #F5F3FC; border: 0.5px solid #C5BAE8; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
 .carryover-title { font-size: 12px; font-weight: 500; color: #5B3DB5; margin-bottom: 12px; }
@@ -107,7 +120,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #BA7517
 <div class="container">
   <div class="header">
     <div style="border-left: 4px solid #BA7517; padding-left: 14px;">
-      <h1>デイトレ日誌</h1>
+      <h1>トレード日誌</h1>
       <div class="subtitle">無理せず毎日少しずつ</div>
     </div>
     <input type="date" id="trade-date">
@@ -120,6 +133,21 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #BA7517
     </div>
     <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
     <div style="display:flex;justify-content:space-between;font-size:11px;color:#888780;margin-top:4px;"><span>0円</span><span>目標: 500,000円</span></div>
+  </div>
+
+  <div class="market-section" id="market-section">
+    <div class="market-header">
+      <div style="font-size:12px;color:#888780;">相場環境</div>
+      <button class="market-save-btn" onclick="saveMarket()">保存</button>
+    </div>
+    <div class="market-grid">
+      <div class="market-item"><div class="market-lbl">前日 日経平均</div><div class="market-val"><input type="number" id="mkt-nk" placeholder="例：38500" step="1" oninput="updateMarketColor('mkt-nk','mkt-nk-ref')"></div></div>
+      <div class="market-item"><div class="market-lbl">前日 TOPIX</div><div class="market-val"><input type="number" id="mkt-topix" placeholder="例：2700" step="0.01" oninput="updateMarketColor('mkt-topix','mkt-topix-ref')"></div></div>
+      <div class="market-item"><div class="market-lbl">日経先物（朝6時）</div><div class="market-val"><input type="number" id="mkt-fut" placeholder="例：38600" step="1"></div></div>
+      <div class="market-item"><div class="market-lbl">NYダウ（朝6時）</div><div class="market-val"><input type="number" id="mkt-dow" placeholder="例：42000" step="1"></div></div>
+      <div class="market-item"><div class="market-lbl">NASDAQ（朝6時）</div><div class="market-val"><input type="number" id="mkt-nas" placeholder="例：18500" step="1"></div></div>
+      <div class="market-item"><div class="market-lbl">米ドル/円（朝6時）</div><div class="market-val"><input type="number" id="mkt-usd" placeholder="例：151.50" step="0.01"></div></div>
+    </div>
   </div>
 
   <div class="tab-row">
@@ -196,10 +224,41 @@ let mood = '';
 let blockCount = 0;
 let entries = JSON.parse(localStorage.getItem('daytrade-v3') || '[]');
 
+function loadMarket() {
+  const date = (document.getElementById('trade-date')||{}).value || '';
+  const key = 'market-' + date;
+  const saved = JSON.parse(localStorage.getItem(key) || 'null');
+  const fields = ['nk','topix','fut','dow','nas','usd'];
+  fields.forEach(f => {
+    const el = document.getElementById('mkt-' + f);
+    if (el) el.value = saved ? (saved[f] || '') : '';
+  });
+}
+
+function saveMarket() {
+  const date = (document.getElementById('trade-date')||{}).value || '';
+  if (!date) return;
+  const key = 'market-' + date;
+  const data = {};
+  ['nk','topix','fut','dow','nas','usd'].forEach(f => {
+    const el = document.getElementById('mkt-' + f);
+    data[f] = el ? el.value : '';
+  });
+  localStorage.setItem(key, JSON.stringify(data));
+  const btn = document.querySelector('.market-save-btn');
+  if (btn) { btn.textContent = '保存済み'; setTimeout(() => btn.textContent = '保存', 1500); }
+}
+
+function updateMarketColor(id) {
+  // placeholder for future delta color logic
+}
+
 (function init() {
   const d = new Date();
   const today = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
   document.getElementById('trade-date').value = today;
+  document.getElementById('trade-date').addEventListener('change', loadMarket);
+  loadMarket();
   addTradeBlock();
   updateMonthly();
   renderEntries();
@@ -710,7 +769,7 @@ function toggleAbout() {
   </button>
   <div id="about-content" style="display:none;margin-top:1rem;font-size:13px;line-height:1.9;color:#5f5e5a;">
     <p style="margin-bottom:0.8rem;">同じ失敗を何度も繰り返す自分に気づいたとき、記録していなかったことが原因だと気づきました。</p>
-    <p style="margin-bottom:0.8rem;">いい株を長期で持てば勝てることはわかってる。でもデイトレで自分の判断を試したい。その欲張りな気持ちと向き合うために、このツールを作りました。</p>
+    <p style="margin-bottom:0.8rem;">いい株を長期で持てば勝てることはわかってる。でも短期売買でも自分の判断を試したい。その欲張りな気持ちと向き合うために、このツールを作りました。</p>
     <p>何分持ったか。なぜ入ったか。なぜ出たか。記録を積み重ねると、自分だけの勝ちパターンが見えてきます。完璧なトレーダーになるためじゃなく、昨日の自分より少しだけマシになるために。</p>
   </div>
 </div>
