@@ -436,6 +436,7 @@ function checkLossLimit() {
   }
   let totalLoss = 0;
   document.querySelectorAll('[id^="pl-"]').forEach(el => {
+    if (el.id.startsWith('co-pl-')) return;
     const v = parseFloat(el.value) || 0;
     if (v < 0) totalLoss += Math.abs(v);
   });
