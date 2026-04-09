@@ -177,6 +177,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #BA7517
     </div>
     <div class="section">
       <div class="section-title">トレード記録（リアルタイム）</div>
+      <div id="today-pnl-bar" style="display:none;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;color:#5f5e5a;">今日の損益合計</span>
+        <span id="today-pnl-val" style="font-size:22px;font-weight:700;">0円</span>
+      </div>
       <div id="trade-blocks"></div>
       <button class="add-btn" onclick="addTradeBlock()">＋ もう1トレード追加</button>
     </div>
@@ -425,6 +429,7 @@ function calcPnl(idx) {
     if (rb) rb.innerHTML = '';
   }
   checkLossLimit();
+  updateTodayPnl();
 }
 
 function checkLossLimit() {
@@ -458,6 +463,24 @@ function checkLossLimit() {
     statusEl.innerHTML = '<span style="color:#888780;">上限まで ' + limit.toLocaleString() + '円</span>';
     warnEl.innerHTML = '';
   }
+}
+
+function updateTodayPnl() {
+  let total = 0;
+  let hasAny = false;
+  document.querySelectorAll('[id^="pl-"]').forEach(el => {
+    if (el.id.startsWith('co-pl-')) return;
+    const v = parseFloat(el.value);
+    if (!isNaN(v)) { total += v; hasAny = true; }
+  });
+  const bar = document.getElementById('today-pnl-bar');
+  const val = document.getElementById('today-pnl-val');
+  if (!bar || !val) return;
+  if (!hasAny) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.style.background = total > 0 ? '#EAF3DE' : total < 0 ? '#FCEBEB' : '#F1EFE8';
+  val.style.color = total > 0 ? '#27500A' : total < 0 ? '#791F1F' : '#1a1a18';
+  val.textContent = (total >= 0 ? '+' : '') + total.toLocaleString() + '円';
 }
 
 function saveDraft() {
@@ -659,12 +682,30 @@ function settleCarryover(date, ti) {
   t.exitPrice = xpEl.value;
   t.exitTime = xtEl ? xtEl.value : '';
   t.pnl = plEl ? plEl.value : '';
-  t.heldMins = null; // overnight, not measured in minutes
+  t.heldMins = null;
   t.isCarryover = true;
   t.settled = true;
+  t.settledDate = (document.getElementById('trade-date')||{}).value || new Date().toISOString().slice(0,10);
   t.result = parseFloat(t.pnl) > 0 ? 'win' : parseFloat(t.pnl) < 0 ? 'loss' : 'even';
-  // Recalculate totalPnl for the entry
-  entries[idx].totalPnl = (entries[idx].trades || []).reduce((s, tr) => s + (parseFloat(tr.pnl) || 0), 0);
+
+  // エントリー日のtotalPnlには持ち越し分を含めない
+  entries[idx].totalPnl = (entries[idx].trades || []).reduce((s, tr) => {
+    if (tr.isCarryover && tr.settled) return s; // 持ち越し決済分は決済日で計上
+    return s + (parseFloat(tr.pnl) || 0);
+  }, 0);
+
+  // 決済日のentryに損益を追加（なければ新規作成）
+  const settledDate = t.settledDate;
+  const pnl = parseFloat(t.pnl) || 0;
+  const sidx = entries.findIndex(e => e.date === settledDate);
+  if (sidx >= 0) {
+    entries[sidx].settledCarryoverPnl = (entries[sidx].settledCarryoverPnl || 0) + pnl;
+    entries[sidx].totalPnl = (entries[sidx].trades || []).reduce((s,tr) => s+(parseFloat(tr.pnl)||0), 0) + (entries[sidx].settledCarryoverPnl || 0);
+  } else {
+    entries.unshift({ date: settledDate, trades: [], totalPnl: pnl, settledCarryoverPnl: pnl, isDraft: false, rules: [], mood: '', emotionNote: '', improvement: '', learning: '' });
+    entries.sort((a,b) => b.date.localeCompare(a.date));
+  }
+
   save(); updateMonthly(); renderEntries(); renderCarryoverSection();
   alert('決済を記録しました！');
 }
